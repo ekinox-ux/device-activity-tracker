@@ -46,7 +46,7 @@ Role: Receives raw data and applies advanced mathematics.
 
 Statistical Engine (Median): Analysis relies on real-time median calculation. This stabilizes ONLINE and IDLE states by naturally filtering out network noise (one-off lags do not skew the status).
 
-Z-Score Analysis: Statistically detects when the user unlocks their screen. If latency drops below the usual variation margin (Standard Deviation), the UNLOCKED event is triggered.
+Z-Score Analysis: Statistically detects when the user unlocks their screen. If latency drops below the usual variation margin (Standard Deviation), the UNLOCKED event is triggered (experimental).
 
 Sleep Detection: Identifies sleep cycles (inactivity > 1h).
 
