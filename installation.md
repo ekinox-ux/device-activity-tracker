@@ -1,50 +1,46 @@
-📦 Installation Guide: Analytics Tracker
-
-Target Environment: Linux Container (LXC/LXD) or VPS
-Recommended OS: Ubuntu 24.04 LTS
+📦 Analytics Tracker – Installation Guide (Ubuntu 24.04 LTS / VPS / LXC)
 
 1. System Requirements
 
-Ensure you are logged in as root or a user with sudo privileges.
-
-Update System
+Make sure your system is up to date:
 
 apt update && apt upgrade -y
 
-
-Install Essential Tools
+Install essential tools:
 
 apt install -y curl git python3 python3-pip python3-venv
 
+2. Install Node.js 20 LTS
 
-2. Install Node.js (v20 LTS)
+Install the official NodeSource repository:
 
-The project requires a modern Node.js version for the WhatsApp Multi-Device protocol.
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 
-# Add NodeSource repository
-curl -fsSL [https://deb.nodesource.com/setup_20.x](https://deb.nodesource.com/setup_20.x) | bash -
-
-# Install Node.js
 apt install -y nodejs
 
-# Verify installation (Should be v20+)
+
+Verify installation:
+
 node -v
 npm -v
 
 
+You should see Node 20+ and npm 10+.
+
 3. Project Setup
 
-Create a dedicated directory for the application to keep things organized.
+Create the application directory:
 
-# Create directory
 mkdir -p /opt/analytics-tracker
 cd /opt/analytics-tracker
 
-# Clone your repository (or copy files manually)
-# git clone https://github.com/ekinox-ux/Whatsapp-Tracker.git
+
+Clone your project (or copy files manually):
+
+# git clone 
 
 
-Ensure the following files are present:
+Required files:
 
 backend_server.py
 
@@ -58,98 +54,88 @@ requirements.txt
 
 ecosystem.config.js
 
+
 4. Backend Setup (Python)
 
-We use a virtual environment (venv) to isolate Python dependencies.
+Create a virtual environment:
 
-# 1. Create virtual environment
+
 python3 -m venv venv
 
-# 2. Install dependencies
-./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt
 
+Install dependencies:
+
+./venv/bin/pip install -r requirements.txt
 
 5. Probe Setup (Node.js)
 
-Install the required Node.js packages and the Process Manager (PM2).
+Install Node.js dependencies:
 
-# 1. Install project dependencies
 npm install
 
-# 2. Install PM2 globaly
-npm install -g pm2
+Install PM2 globally:
 
+npm install -g pm2
 
 6. PM2 Configuration
 
-PM2 acts as the orchestrator. It ensures both the Python backend and the Node.js probe run simultaneously and restart automatically if they crash.
+Check that your ecosystem.config.js points to the virtualenv Python:
 
-Check your ecosystem.config.js. It must point to the virtual environment Python interpreter:
-
-// Inside ecosystem.config.js
 interpreter: "./venv/bin/python",
 
 
-7. Start & Pair
-
-Start the Services
+Start the services:
 
 pm2 start ecosystem.config.js
 
 
-Enable Startup on Boot
-
-To ensure the tracker restarts after a server reboot:
+Enable auto-start on reboot:
 
 pm2 save
 pm2 startup
-# Run the command displayed by the output of 'pm2 startup'
 
+# Run the command printed by pm2 startup
 
-Link WhatsApp Account
+7. Start & Pair
 
-Monitor the logs to see the pairing code:
+View logs:
 
 pm2 logs NODE-WORKER
 
 
-You will see a message: >>> QR CODE ON DASHBOARD.
+Look for:
 
-Open the Dashboard in your browser:
+>>> QR CODE ON DASHBOARD
 
-URL: http://<YOUR_SERVER_IP>:5001
 
-Open WhatsApp on your phone → Linked Devices → Link a Device.
+Open your dashboard:
 
-Scan the QR Code displayed on the dashboard.
+http://<YOUR_SERVER_IP>:5001
+
+
+Then pair your WhatsApp device:
+
+WhatsApp → Linked Devices → Link a Device → Scan the QR Code
 
 8. Maintenance
 
-View Status
-
-Check if services are online:
+Check service status:
 
 pm2 status
 
 
-View Real-time Logs
-
-See ping operations and detections live:
+Real-time logs:
 
 pm2 monit
 
 
-Update Application
-
-If you modify the code, apply changes with:
+Apply updates:
 
 pm2 restart all
 
+9. Firewall (Optional)
 
-🛡️ Firewall Configuration (UFW)
-
-If you are using a firewall (UFW), allow traffic on port 5001:
+If you use UFW:
 
 ufw allow 5001/tcp
 ufw reload
