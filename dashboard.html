@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>ANALYTICS PRO</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117; --panel: #161b22; --border: #30363d;
+            --text: #c9d1d9; --green: #2ea043; --red: #da3633; --blue: #58a6ff;
+            --active: #a371f7;
+        }
+        body { background: var(--bg); color: var(--text); font-family: monospace; margin: 0; height: 100vh; display: flex; overflow: hidden;}
+        
+        .sidebar { width: 300px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
+        .add-box { display: flex; gap: 5px; margin-top: 10px; }
+        .add-box input { background: #000; border: 1px solid var(--border); color: white; width: 100%; padding: 5px; }
+        .add-box button { background: var(--blue); border: none; color: white; cursor: pointer; font-weight: bold;}
+        
+        .target-list { overflow-y: auto; flex-grow: 1; }
+        .target-card { padding: 15px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; gap: 10px; transition: 0.2s; }
+        .target-card:hover { background: #21262d; }
+        .target-card.active { background: #1f2428; border-left: 4px solid var(--blue); }
+        
+        .avatar { width: 40px; height: 40px; border-radius: 50%; background: #000; object-fit: cover; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        
+        .st-UNLOCKED { background: var(--active); box-shadow: 0 0 10px var(--active); animation: pulse 1s infinite; }
+        .st-ONLINE { background: var(--green); }
+        .st-IDLE { background: orange; }
+        .st-OFFLINE { background: #555; }
+        
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .main { flex-grow: 1; display: flex; flex-direction: column; padding: 20px; gap: 20px; }
+        .panel { background: var(--panel); border: 1px solid var(--border); padding: 15px; border-radius: 6px; display: flex; flex-direction: column; }
+        
+        .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 30%; min-height: 200px;}
+        
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+        
+        #qrOverlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; justify-content:center; align-items:center; z-index:999; flex-direction: column;}
+        #qrBox { background: white; padding: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="qrOverlay">
+    <h2 style="color:white">CONNEXION REQUISE</h2>
+    <div id="qrBox"></div>
+</div>
+
+<div class="sidebar">
+    <div class="sidebar-header">
+        <h3 style="margin:0; color:var(--blue)">ANALYTICS</h3>
+        <div id="sysStatus" style="font-size:0.8em; margin-top:5px; color:#888">System: Init...</div>
+        <div class="add-box">
+            <input type="text" id="newTarget" placeholder="33612345678">
+            <button onclick="addTarget()">+</button>
+        </div>
+    </div>
+    <div class="target-list" id="targetList"></div>
+</div>
+
+<div class="main">
+    <div class="panel" style="flex-grow: 1;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px; align-items:center">
+            <div><h3 style="margin:0" id="chartTitle">Sélectionnez une cible</h3></div>
+            <button onclick="deleteCurrentTarget()" style="background:var(--red); border:none; color:white; padding:5px 10px; cursor:pointer;">SUPPRIMER</button>
+        </div>
+        <div style="flex-grow:1; position:relative; min-height:0;">
+            <canvas id="rttChart"></canvas>
+        </div>
+    </div>
+    
+    <div class="bottom-grid">
+        <div class="panel">
+            <h4 style="margin:0 0 10px 0;">Flux Temps Réel</h4>
+            <div style="overflow-y:auto; flex-grow:1;">
+                <table id="logsTable"><thead><tr><th>Heure</th><th>Statut</th><th>RTT</th></tr></thead><tbody></tbody></table>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h4 style="margin:0 0 10px 0; color: #8b949e;">💤 Sommeil / Inactivité (>1h)</h4>
+            <div style="overflow-y:auto; flex-grow:1;">
+                <table id="sleepTable"><thead><tr><th>Début</th><th>Fin</th><th>Durée</th></tr></thead><tbody></tbody></table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedTarget = null;
+    let chartInstance = null;
+
+    const ctx = document.getElementById('rttChart').getContext('2d');
+    
+    let gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, 'rgba(163, 113, 247, 0.2)'); 
+    gradient.addColorStop(1, 'rgba(88, 166, 255, 0)');
+
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ 
+            label: 'RTT (ms)', 
+            data: [], 
+            borderColor: '#58a6ff', 
+            backgroundColor: gradient,
+            borderWidth: 2,
+            pointRadius: 3, 
+            pointHoverRadius: 6,
+            fill: true,
+            tension: 0.3
+        }]},
+        options: { 
+            responsive: true, maintainAspectRatio: false, animation: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: { 
+                x: { grid: { display: false, color: '#30363d' }, ticks: { color: '#8b949e', maxTicksLimit: 10 } },
+                y: { beginAtZero: true, max: 2000, grid: { color: '#21262d' }, ticks: { color: '#8b949e' } } 
+            } 
+        }
+    });
+
+    async function addTarget() {
+        const input = document.getElementById('newTarget');
+        if(!input.value) return;
+        await fetch('/api/targets', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ target: input.value }) });
+        input.value = '';
+        updateSidebar();
+    }
+
+    async function deleteCurrentTarget() {
+        if(!selectedTarget) return;
+        if(confirm("Supprimer cette cible ?")) {
+            await fetch('/api/targets', { method: 'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ target: selectedTarget }) });
+            selectedTarget = null;
+            updateSidebar();
+        }
+    }
+
+    async function selectTarget(targetId) {
+        selectedTarget = targetId;
+        document.getElementById('chartTitle').innerText = "Target: " + targetId.split('@')[0];
+        updateHistory();
+    }
+
+    async function updateSidebar() {
+        const res = await fetch('/api/dashboard_data');
+        const data = await res.json();
+        
+        const sys = document.getElementById('sysStatus');
+        sys.innerText = "System: " + data.system.connection;
+        const qrOverlay = document.getElementById('qrOverlay');
+        if(data.system.qr_code && data.system.connection !== 'CONNECTED') {
+            qrOverlay.style.display = 'flex';
+            document.getElementById('qrBox').innerHTML = "";
+            new QRCode(document.getElementById("qrBox"), { text: data.system.qr_code, width: 256, height: 256 });
+        } else {
+            qrOverlay.style.display = 'none';
+        }
+
+        const list = document.getElementById('targetList');
+        list.innerHTML = Object.keys(data.targets).map(jid => {
+            const t = data.targets[jid];
+            const isActive = jid === selectedTarget ? 'active' : '';
+            const statusClass = 'st-' + (t.status || 'OFFLINE');
+            
+            let label = t.status;
+            if(t.status === 'UNLOCKED') label = "🔥 UNLOCKED";
+
+            return `
+            <div class="target-card ${isActive}" onclick="selectTarget('${jid}')">
+                <img src="${t.avatar || 'https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png'}" class="avatar">
+                <div>
+                    <div style="font-weight:bold">${jid.split('@')[0]}</div>
+                    <div style="font-size:0.8em; color:#888"><span class="status-dot ${statusClass}"></span>${label}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function updateHistory() {
+        if(!selectedTarget) return;
+        const res = await fetch('/api/history/' + selectedTarget);
+        const data = await res.json();
+        
+        const logs = data.logs.reverse();
+        
+        const labels = logs.map(l => new Date(l.timestamp * 1000).toLocaleTimeString());
+        const values = logs.map(l => l.rtt_ms);
+        
+        const lastStatus = logs[logs.length-1]?.status;
+        let curveColor = '#58a6ff';
+        if (lastStatus === 'UNLOCKED') curveColor = '#a371f7';
+        if (lastStatus === 'OFFLINE') curveColor = '#555';
+
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].data = values;
+        chartInstance.data.datasets[0].borderColor = curveColor;
+        chartInstance.update();
+
+        document.querySelector('#logsTable tbody').innerHTML = logs.slice().reverse().slice(0, 50).map(l => {
+            let color = "#888";
+            if(l.status === 'ONLINE') color = "#2ea043";
+            if(l.status === 'UNLOCKED') color = "#a371f7";
+            if(l.status === 'IDLE') color = "orange";
+            return `<tr>
+                <td>${new Date(l.timestamp*1000).toLocaleTimeString()}</td>
+                <td style="color:${color}; font-weight:bold">${l.status}</td>
+                <td>${Math.round(l.rtt_ms)}ms</td>
+            </tr>`;
+        }).join('');
+
+        document.querySelector('#sleepTable tbody').innerHTML = data.sleep_cycles.map(s => {
+            const style = s.is_current ? 'color: orange; font-weight: bold; animation: pulse 2s infinite;' : 'color: #8b949e;';
+            return `<tr style="${style}">
+                <td>${s.start}</td>
+                <td>${s.end}</td>
+                <td>${s.duration}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    setInterval(() => {
+        updateSidebar();
+        if(selectedTarget) updateHistory();
+    }, 2000);
+    
+    updateSidebar();
+</script>
+</body>
+</html>
